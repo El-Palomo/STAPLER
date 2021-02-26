@@ -252,7 +252,7 @@ User peter may run the following commands on red:
 
 <img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler7.jpg" width="80%"></img>
 
-## Explotando Vulnerabilidades: Método 02 (a través de WORDPRESS)
+## Explotando Vulnerabilidades: Método 02 (a través de WORDPRESS y MYSQL)
 
 ### 1. Enumerar toda la información de los servicios HTTP
 En el puerto TCP/80 tenemos dos archivos. No lo encontré con el GOBUSTER pero si con NIKTO. Nada importante.
@@ -416,5 +416,8 @@ www-data@red:/tmp/39772/39772/ebpf_mapfd_doubleput_exploit$ chmod +x doubleput
 ./doubleput
 ```
 <img src="https://github.com/El-Palomo/STAPLER/blob/main/stapler19.jpg" width="80%"></img>
+
+
+
 
 
